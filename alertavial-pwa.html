@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#ff3333">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AlertaVial">
+<meta name="description" content="Alertas en tiempo real de vehículos de emergencia. Modo Emisor y Receptor con mapa GPS.">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>AlertaVial PRO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;800;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#080c10;--surface:#0d1117;--card:#111820;--border:#1c2633;--border2:#243040;--red:#ff3333;--red-dim:rgba(255,51,51,0.15);--blue:#0088ff;--amber:#ffaa00;--green:#00e676;--text:#e8edf2;--muted:#4a6070;--r:10px;--font-head:'Barlow Condensed',sans-serif;--font-body:'Barlow',sans-serif}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font-body);overflow:hidden}
+.screen{display:none;flex-direction:column;height:100vh;overflow:hidden}
+.screen.active{display:flex}
+
+/* INSTALL BANNER */
+#installBanner{
+  position:fixed;bottom:0;left:0;right:0;z-index:9999;
+  background:linear-gradient(135deg,#0d1117,#111820);
+  border-top:1px solid var(--border2);
+  padding:16px;
+  display:none;
+  align-items:center;gap:12px;
+  box-shadow:0 -8px 32px rgba(0,0,0,0.5);
+  animation:slide-up .4s cubic-bezier(.16,1,.3,1);
+}
+#installBanner.show{display:flex;}
+@keyframes slide-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.install-icon{font-size:32px;flex-shrink:0}
+.install-text{flex:1}
+.install-title{font-family:var(--font-head);font-size:16px;font-weight:800;color:var(--text);}
+.install-sub{font-size:12px;color:var(--muted);}
+.install-btn{
+  background:var(--red);color:#fff;border:none;
+  font-family:var(--font-head);font-size:15px;font-weight:800;letter-spacing:1px;
+  padding:10px 18px;border-radius:8px;cursor:pointer;flex-shrink:0;
+  white-space:nowrap;
+}
+.install-close{font-size:20px;color:var(--muted);cursor:pointer;flex-shrink:0;padding:4px;}
+
+/* OFFLINE BANNER */
+#offlineBanner{
+  position:fixed;top:0;left:0;right:0;z-index:8888;
+  background:#332200;border-bottom:1px solid #664400;
+  color:#ffaa00;font-size:12px;font-weight:600;letter-spacing:1px;
+  text-align:center;padding:8px;
+  display:none;
+}
+#offlineBanner.show{display:block;}
+
+/* SPLASH */
+#splashScreen{
+  align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 0%,rgba(255,51,51,0.08) 0%,transparent 60%),radial-gradient(ellipse at 80% 100%,rgba(0,136,255,0.06) 0%,transparent 60%),var(--bg);
+  padding:24px;
+}
+.splash-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.015) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;}
+.splash-logo{font-family:var(--font-head);font-size:56px;font-weight:900;letter-spacing:3px;line-height:1;text-align:center;margin-bottom:6px;}
+.splash-logo em{color:var(--red);font-style:normal}
+.splash-tag{font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:8px;}
+.splash-version{font-size:10px;letter-spacing:2px;color:#1c2633;text-align:center;margin-bottom:48px;}
+.mode-cards{display:flex;flex-direction:column;gap:14px;width:100%;max-width:380px}
+.mode-card{border-radius:var(--r);padding:22px 18px;cursor:pointer;border:1.5px solid var(--border2);background:var(--card);display:flex;align-items:center;gap:16px;transition:transform .2s,border-color .2s,box-shadow .2s;position:relative;overflow:hidden;}
+.mode-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.03) 0%,transparent 60%);}
+.mode-card:hover{transform:translateY(-2px);}
+.mode-card:active{transform:scale(0.98);}
+.mode-card.emitter{border-color:rgba(255,51,51,0.3);}
+.mode-card.emitter:hover{border-color:var(--red);box-shadow:0 8px 30px rgba(255,51,51,0.15);}
+.mode-card.receiver{border-color:rgba(0,136,255,0.3);}
+.mode-card.receiver:hover{border-color:var(--blue);box-shadow:0 8px 30px rgba(0,136,255,0.15);}
+.mode-icon{font-size:34px;width:52px;height:52px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.mode-card.emitter .mode-icon{background:rgba(255,51,51,0.1);}
+.mode-card.receiver .mode-icon{background:rgba(0,136,255,0.1);}
+.mode-title{font-family:var(--font-head);font-size:21px;font-weight:800;letter-spacing:1px;text-transform:uppercase;margin-bottom:3px;}
+.mode-card.emitter .mode-title{color:var(--red);}
+.mode-card.receiver .mode-title{color:var(--blue);}
+.mode-desc{font-size:12px;color:var(--muted);line-height:1.5;}
+.mode-arrow{margin-left:auto;font-size:20px;color:var(--muted);flex-shrink:0;transition:transform .2s;}
+.mode-card:hover .mode-arrow{transform:translateX(4px);}
+.pwa-badge{display:flex;align-items:center;gap:6px;margin-top:20px;padding:8px 16px;border-radius:20px;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.2);}
+.pwa-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink .8s infinite alternate;}
+.pwa-text{font-size:11px;letter-spacing:1.5px;color:var(--green);font-weight:600;}
+@keyframes blink{from{opacity:1}to{opacity:.4}}
+
+/* TOP BAR */
+.topbar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;background:var(--surface);}
+.topbar-back{width:36px;height:36px;border-radius:8px;background:var(--card);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;flex-shrink:0;}
+.topbar-title{font-family:var(--font-head);font-size:20px;font-weight:800;letter-spacing:1.5px;flex:1;}
+.topbar-badge{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:4px 10px;border-radius:20px;background:var(--card);color:var(--muted);border:1px solid var(--border2);}
+.topbar-badge.live{background:rgba(0,230,118,0.1);color:var(--green);border-color:rgba(0,230,118,0.2);animation:blink .8s infinite alternate;}
+.topbar-badge.alerting{background:rgba(255,51,51,0.15);color:var(--red);border-color:rgba(255,51,51,0.3);animation:blink .4s infinite alternate;}
+
+/* MAP */
+.map-container{flex:1;position:relative;min-height:0;}
+#emitterMap,#receiverMap{width:100%;height:100%;}
+.leaflet-container{background:#0d1520;}
+.leaflet-tile{filter:brightness(0.5) saturate(0.7) hue-rotate(180deg) invert(1);}
+
+/* BOTTOM PANEL */
+.bottom-panel{flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);padding:14px;max-height:44vh;overflow-y:auto;}
+.bottom-panel::-webkit-scrollbar{width:3px;}
+.bottom-panel::-webkit-scrollbar-thumb{background:var(--border2);}
+
+/* EMITTER */
+.emit-status{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.emit-dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+.emit-dot.active{background:var(--red);animation:blink .5s infinite alternate;}
+.emit-label{font-family:var(--font-head);font-size:17px;font-weight:700;letter-spacing:1px;}
+.emit-controls{display:flex;flex-direction:column;gap:10px;}
+.big-btn{width:100%;padding:15px;border-radius:var(--r);border:none;cursor:pointer;font-family:var(--font-head);font-size:17px;font-weight:800;letter-spacing:2px;text-transform:uppercase;transition:transform .15s,box-shadow .2s;}
+.big-btn:active{transform:scale(0.97);}
+.btn-start-alert{background:linear-gradient(135deg,#cc0000,#ff3333);color:#fff;box-shadow:0 4px 24px rgba(255,51,51,0.3);}
+.btn-start-alert.pulsing{animation:btn-pulse .8s ease-in-out infinite alternate;}
+@keyframes btn-pulse{from{box-shadow:0 4px 20px rgba(255,51,51,0.3);}to{box-shadow:0 4px 40px rgba(255,51,51,0.7);}}
+.btn-stop-alert{background:var(--card);color:var(--muted);border:1px solid var(--border2);}
+.vehicle-types{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+.vtype{padding:7px 12px;border-radius:8px;background:var(--card);border:1px solid var(--border2);font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:5px;}
+.vtype.selected{border-color:var(--red);color:var(--red);background:rgba(255,51,51,0.08);}
+.info-row{display:flex;gap:8px;margin-top:10px;}
+.info-chip{flex:1;background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;text-align:center;}
+.info-chip-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
+.info-chip-val{font-family:var(--font-head);font-size:18px;font-weight:700;color:var(--text);}
+
+/* RECEIVER */
+.recv-idle{text-align:center;padding:18px 0;}
+.recv-idle-icon{font-size:44px;margin-bottom:10px;}
+.recv-idle-title{font-family:var(--font-head);font-size:20px;font-weight:800;letter-spacing:1px;color:var(--muted);margin-bottom:5px;}
+.recv-idle-desc{font-size:12px;color:var(--muted);line-height:1.6;}
+.alert-card{border-radius:var(--r);border:1.5px solid var(--red);background:rgba(255,51,51,0.05);padding:14px;margin-bottom:12px;display:none;}
+.alert-card.visible{display:block;animation:card-in .4s ease;}
+@keyframes card-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.alert-card-header{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.alert-card-icon{font-size:26px;}
+.alert-card-title{font-family:var(--font-head);font-size:21px;font-weight:800;letter-spacing:1px;color:var(--red);}
+.alert-card-sub{font-size:11px;color:var(--muted);}
+.alert-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px;}
+.alert-detail{background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;}
+.alert-detail-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
+.alert-detail-val{font-family:var(--font-head);font-size:17px;font-weight:700;}
+.instruction-box{background:rgba(255,170,0,0.08);border:1px solid rgba(255,170,0,0.25);border-radius:8px;padding:10px 12px;display:flex;gap:8px;align-items:flex-start;}
+.instruction-box .inst-icon{font-size:18px;flex-shrink:0;margin-top:1px;}
+.instruction-box .inst-text{font-size:12px;color:var(--amber);line-height:1.5;}
+.dist-badge-wrap{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:1000;background:var(--surface);border:1px solid var(--border2);border-radius:40px;padding:8px 18px;display:flex;align-items:center;gap:8px;font-family:var(--font-head);box-shadow:0 4px 20px rgba(0,0,0,.5);white-space:nowrap;}
+.dist-badge-wrap.hidden{display:none;}
+
+/* GLOBAL ALERT */
+#alertOverlay{position:fixed;inset:0;z-index:9999;background:rgba(200,0,0,.07);pointer-events:none;opacity:0;transition:opacity .3s;}
+#alertOverlay.on{opacity:1;animation:ov-pulse .6s ease-in-out infinite alternate;}
+@keyframes ov-pulse{from{background:rgba(200,0,0,.04);}to{background:rgba(200,0,0,.14);}}
+#alertBanner{position:fixed;top:0;left:0;right:0;z-index:10000;background:var(--red);color:#fff;font-family:var(--font-head);font-size:15px;font-weight:800;letter-spacing:2px;text-transform:uppercase;padding:13px 16px;text-align:center;transform:translateY(-100%);transition:transform .4s cubic-bezier(.16,1,.3,1);display:flex;align-items:center;justify-content:center;gap:8px;}
+#alertBanner.show{transform:translateY(0);}
+.demo-notice{background:rgba(255,170,0,0.07);border-top:1px solid rgba(255,170,0,0.15);padding:7px 16px;font-size:10px;color:rgba(255,170,0,0.6);letter-spacing:.5px;text-align:center;flex-shrink:0;}
+</style>
+</head>
+<body>
+
+<div id="alertOverlay"></div>
+<div id="alertBanner">🚨 VEHÍCULO DE EMERGENCIA — CEDE EL PASO 🚨</div>
+<div id="offlineBanner">📡 SIN CONEXIÓN — Funcionando en modo offline</div>
+
+<!-- INSTALL PROMPT -->
+<div id="installBanner">
+  <div class="install-icon">📲</div>
+  <div class="install-text">
+    <div class="install-title">Instalar AlertaVial PRO</div>
+    <div class="install-sub">Agregá la app a tu pantalla de inicio — es gratis</div>
+  </div>
+  <button class="install-btn" onclick="installApp()">INSTALAR</button>
+  <div class="install-close" onclick="dismissInstall()">✕</div>
+</div>
+
+<!-- SPLASH -->
+<div class="screen active" id="splashScreen">
+  <div class="splash-grid"></div>
+  <div class="splash-logo">Alerta<em>Vial</em></div>
+  <div class="splash-tag">Sistema de alertas viales en tiempo real</div>
+  <div class="splash-version" id="pwaStatus">Cargando...</div>
+
+  <div class="mode-cards">
+    <div class="mode-card emitter" onclick="enterMode('emitter')">
+      <div class="mode-icon">🚑</div>
+      <div class="mode-info">
+        <div class="mode-title">Modo Emisor</div>
+        <div class="mode-desc">Conductor de emergencia o urgencia personal. Emite alerta a conductores cercanos.</div>
+      </div>
+      <div class="mode-arrow">›</div>
+    </div>
+    <div class="mode-card receiver" onclick="enterMode('receiver')">
+      <div class="mode-icon">🚗</div>
+      <div class="mode-info">
+        <div class="mode-title">Modo Receptor</div>
+        <div class="mode-desc">Conductor particular. Recibe alertas y ve la ruta de emergencias en el mapa.</div>
+      </div>
+      <div class="mode-arrow">›</div>
+    </div>
+  </div>
+
+  <div class="pwa-badge" id="pwaBadge" style="display:none">
+    <div class="pwa-dot"></div>
+    <div class="pwa-text">APP INSTALADA ✓</div>
+  </div>
+</div>
+
+<!-- EMITTER -->
+<div class="screen" id="emitterScreen">
+  <div class="topbar">
+    <div class="topbar-back" onclick="goBack()">←</div>
+    <div class="topbar-title" style="color:var(--red)">🚨 EMISOR</div>
+    <div class="topbar-badge" id="emitBadge">INACTIVO</div>
+  </div>
+  <div class="map-container">
+    <div id="emitterMap"></div>
+    <div class="dist-badge-wrap hidden" id="emitDistBadge">
+      <span style="color:var(--muted);font-size:11px">Recorrido</span>
+      <span style="font-size:19px;color:var(--red)" id="emitDistVal">0 m</span>
+    </div>
+  </div>
+  <div class="bottom-panel">
+    <div class="emit-status">
+      <div class="emit-dot" id="emitDot"></div>
+      <div class="emit-label" id="emitStatusLabel">Seleccioná tipo y activá la alerta</div>
+    </div>
+    <div class="vehicle-types" id="vtypeGroup">
+      <div class="vtype selected" data-v="ambulancia" onclick="selectVtype(this)">🚑 Ambulancia</div>
+      <div class="vtype" data-v="bomberos" onclick="selectVtype(this)">🚒 Bomberos</div>
+      <div class="vtype" data-v="policia" onclick="selectVtype(this)">🚔 Policía</div>
+      <div class="vtype" data-v="urgencia" onclick="selectVtype(this)">⚡ Urgencia</div>
+    </div>
+    <div class="emit-controls">
+      <button class="big-btn btn-start-alert" id="startAlertBtn" onclick="startEmitting()">🚨 ACTIVAR ALERTA</button>
+      <button class="big-btn btn-stop-alert" id="stopAlertBtn" onclick="stopEmitting()" style="display:none">⏹ DESACTIVAR</button>
+    </div>
+    <div class="info-row">
+      <div class="info-chip"><div class="info-chip-label">Velocidad</div><div class="info-chip-val" id="speedVal">—</div></div>
+      <div class="info-chip"><div class="info-chip-label">Receptores</div><div class="info-chip-val" id="receptorCount">0</div></div>
+      <div class="info-chip"><div class="info-chip-label">Tiempo</div><div class="info-chip-val" id="activeTime">00:00</div></div>
+    </div>
+  </div>
+  <div class="demo-notice">⚠ Conectar Firebase para transmisión real entre dispositivos</div>
+</div>
+
+<!-- RECEIVER -->
+<div class="screen" id="receiverScreen">
+  <div class="topbar">
+    <div class="topbar-back" onclick="goBack()">←</div>
+    <div class="topbar-title" style="color:var(--blue)">🚗 RECEPTOR</div>
+    <div class="topbar-badge live" id="recvBadge">ESCUCHANDO</div>
+  </div>
+  <div class="map-container">
+    <div id="receiverMap"></div>
+    <div class="dist-badge-wrap hidden" id="recvDistBadge">
+      <span style="color:var(--muted);font-size:11px">📍 Emergencia a</span>
+      <span style="font-size:19px;color:var(--red)" id="recvDistVal">—</span>
+    </div>
+  </div>
+  <div class="bottom-panel">
+    <div class="alert-card" id="alertCard">
+      <div class="alert-card-header">
+        <div class="alert-card-icon" id="alertCardIcon">🚑</div>
+        <div><div class="alert-card-title">¡EMERGENCIA ACTIVA!</div><div class="alert-card-sub" id="alertCardSub">Vehículo en tu zona</div></div>
+      </div>
+      <div class="alert-detail-grid">
+        <div class="alert-detail"><div class="alert-detail-label">Tipo</div><div class="alert-detail-val" id="alertType">Ambulancia 🚑</div></div>
+        <div class="alert-detail"><div class="alert-detail-label">Distancia</div><div class="alert-detail-val" id="alertDist" style="color:var(--red)">—</div></div>
+        <div class="alert-detail"><div class="alert-detail-label">Velocidad</div><div class="alert-detail-val" id="alertSpeed">—</div></div>
+        <div class="alert-detail"><div class="alert-detail-label">Dirección</div><div class="alert-detail-val" id="alertDir">—</div></div>
+      </div>
+      <div class="instruction-box">
+        <span class="inst-icon">⚠️</span>
+        <span class="inst-text" id="instrText">Movete a la derecha y detenete si es posible.</span>
+      </div>
+    </div>
+    <div class="recv-idle" id="recvIdle">
+      <div class="recv-idle-icon">📡</div>
+      <div class="recv-idle-title">MONITOREANDO ZONA</div>
+      <div class="recv-idle-desc">Recibirás una alerta automática cuando un vehículo de emergencia esté cerca.</div>
+    </div>
+  </div>
+  <div class="demo-notice">⚠ Demo: simula emergencia cada 20 s para mostrar el funcionamiento</div>
+</div>
+
+<script>
+/* ── STATE ── */
+let currentMode=null,emitterMap=null,receiverMap=null,myPos=null;
+let gpsWatcher=null,emitting=false,selectedVtype='ambulancia';
+let activeTimeInterval=null,activeSeconds=0;
+let emitMarker=null,recvMyMarker=null,emergencyMarker=null;
+let emitPath=[],emitPolyline=null,demoInterval=null,demoActive=false;
+let deferredPrompt=null;
+
+const vtypes={
+  ambulancia:{icon:'🚑',label:'Ambulancia',color:'#ff3333'},
+  bomberos:{icon:'🚒',label:'Bomberos',color:'#ff6600'},
+  policia:{icon:'🚔',label:'Policía',color:'#0055ff'},
+  urgencia:{icon:'⚡',label:'Urgencia Personal',color:'#ff33aa'},
+};
+
+/* ── PWA INSTALL ── */
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();deferredPrompt=e;
+  setTimeout(()=>document.getElementById('installBanner').classList.add('show'),3000);
+});
+window.addEventListener('appinstalled',()=>{
+  document.getElementById('installBanner').classList.remove('show');
+  document.getElementById('pwaBadge').style.display='flex';
+  document.getElementById('pwaStatus').textContent='';
+});
+function installApp(){
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(()=>{
+    deferredPrompt=null;
+    document.getElementById('installBanner').classList.remove('show');
+  });
+}
+function dismissInstall(){document.getElementById('installBanner').classList.remove('show');}
+
+/* ── OFFLINE DETECTION ── */
+window.addEventListener('online',()=>document.getElementById('offlineBanner').classList.remove('show'));
+window.addEventListener('offline',()=>document.getElementById('offlineBanner').classList.add('show'));
+if(!navigator.onLine) document.getElementById('offlineBanner').classList.add('show');
+
+/* ── SERVICE WORKER ── */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(()=>{
+    const s=document.getElementById('pwaStatus');
+    if(window.matchMedia('(display-mode: standalone)').matches){
+      s.style.display='none';
+      document.getElementById('pwaBadge').style.display='flex';
+    } else {
+      s.textContent='v1.0 · Instalable gratis';s.style.color='#2a3a4a';
+    }
+  }).catch(()=>{
+    document.getElementById('pwaStatus').textContent='v1.0';
+  });
+}
+
+/* ── SCREENS ── */
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function goBack(){stopEmitting();stopGPS();clearDemo();currentMode=null;showScreen('splashScreen');}
+function enterMode(mode){
+  currentMode=mode;
+  showScreen(mode==='emitter'?'emitterScreen':'receiverScreen');
+  setTimeout(()=>mode==='emitter'?initEmitterMap():initReceiverMap(),100);
+  startGPS();
+}
+
+/* ── GPS ── */
+function startGPS(){
+  if(!navigator.geolocation){alert('Tu navegador no soporta GPS');return;}
+  gpsWatcher=navigator.geolocation.watchPosition(
+    pos=>{myPos={lat:pos.coords.latitude,lng:pos.coords.longitude};onPos(pos.coords.speed?Math.round(pos.coords.speed*3.6):null);},
+    ()=>fallbackPos(),{enableHighAccuracy:true,timeout:10000,maximumAge:2000}
+  );
+}
+function fallbackPos(){if(!myPos)myPos={lat:-34.6037,lng:-58.3816};moveSimulated();}
+function moveSimulated(){
+  let a=Math.random()*Math.PI*2;
+  setInterval(()=>{if(!myPos)return;a+=(Math.random()-.5)*.3;myPos={lat:myPos.lat+Math.cos(a)*.00008,lng:myPos.lng+Math.sin(a)*.00008};onPos(Math.floor(Math.random()*40+20));},2000);
+}
+function onPos(speed){if(currentMode==='emitter')updateEmitterMap(speed);else if(currentMode==='receiver')updateReceiverMap();}
+function stopGPS(){if(gpsWatcher)navigator.geolocation.clearWatch(gpsWatcher);gpsWatcher=null;}
+
+/* ── EMITTER MAP ── */
+function initEmitterMap(){
+  if(emitterMap)return;
+  emitterMap=L.map('emitterMap',{zoomControl:false,attributionControl:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(emitterMap);
+  L.control.zoom({position:'topright'}).addTo(emitterMap);
+  const p=myPos||{lat:-34.6037,lng:-58.3816};
+  emitterMap.setView([p.lat,p.lng],15);
+  emitMarker=L.marker([p.lat,p.lng],{icon:L.divIcon({html:`<div style="width:40px;height:40px;background:#ff3333;border-radius:50%;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 0 20px rgba(255,51,51,.6)">🚑</div>`,iconSize:[40,40],iconAnchor:[20,20],className:''})}).addTo(emitterMap);
+  emitPolyline=L.polyline([],{color:'#ff3333',weight:4,opacity:.7,dashArray:'8,4'}).addTo(emitterMap);
+}
+function updateEmitterMap(speed){
+  if(!emitterMap||!myPos)return;
+  emitMarker.setLatLng([myPos.lat,myPos.lng]);
+  emitterMap.panTo([myPos.lat,myPos.lng],{animate:true,duration:.5});
+  if(emitting){
+    emitPath.push([myPos.lat,myPos.lng]);
+    emitPolyline.setLatLngs(emitPath);
+    if(speed)document.getElementById('speedVal').textContent=speed+' km/h';
+    if(emitPath.length>1){
+      const total=emitPath.reduce((acc,_,i)=>i===0?0:acc+haversine(emitPath[i-1][0],emitPath[i-1][1],emitPath[i][0],emitPath[i][1]),0);
+      document.getElementById('emitDistVal').textContent=total>1000?(total/1000).toFixed(1)+' km':Math.round(total)+' m';
+    }
+  }
+}
+
+/* ── RECEIVER MAP ── */
+function initReceiverMap(){
+  if(receiverMap)return;
+  receiverMap=L.map('receiverMap',{zoomControl:false,attributionControl:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(receiverMap);
+  L.control.zoom({position:'topright'}).addTo(receiverMap);
+  const p=myPos||{lat:-34.6037,lng:-58.3816};
+  receiverMap.setView([p.lat,p.lng],15);
+  recvMyMarker=L.marker([p.lat,p.lng],{icon:L.divIcon({html:`<div style="width:36px;height:36px;background:#0088ff;border-radius:50%;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 16px rgba(0,136,255,.6)">🚗</div>`,iconSize:[36,36],iconAnchor:[18,18],className:''})}).addTo(receiverMap);
+  setTimeout(triggerDemo,4000);
+  demoInterval=setInterval(triggerDemo,22000);
+}
+function updateReceiverMap(){if(receiverMap&&myPos&&!demoActive)receiverMap.panTo([myPos.lat,myPos.lng],{animate:true,duration:.5});if(recvMyMarker&&myPos)recvMyMarker.setLatLng([myPos.lat,myPos.lng]);}
+
+/* ── EMITTER CONTROLS ── */
+function selectVtype(el){document.querySelectorAll('.vtype').forEach(v=>v.classList.remove('selected'));el.classList.add('selected');selectedVtype=el.dataset.v;}
+function startEmitting(){
+  emitting=true;emitPath=myPos?[[myPos.lat,myPos.lng]]:[];activeSeconds=0;
+  document.getElementById('startAlertBtn').style.display='none';
+  document.getElementById('stopAlertBtn').style.display='';
+  document.getElementById('emitBadge').textContent='ALERTA ACTIVA';document.getElementById('emitBadge').className='topbar-badge alerting';
+  document.getElementById('emitDot').className='emit-dot active';
+  document.getElementById('emitStatusLabel').textContent='⚠ Alerta activa — transmitiendo';
+  document.getElementById('startAlertBtn').className='big-btn btn-start-alert pulsing';
+  document.getElementById('emitDistBadge').classList.remove('hidden');
+  let c=0;const ri=setInterval(()=>{if(!emitting){clearInterval(ri);return;}c=Math.min(c+Math.floor(Math.random()*3+1),24);document.getElementById('receptorCount').textContent=c;},3000);
+  activeTimeInterval=setInterval(()=>{activeSeconds++;const m=String(Math.floor(activeSeconds/60)).padStart(2,'0'),s=String(activeSeconds%60).padStart(2,'0');document.getElementById('activeTime').textContent=m+':'+s;},1000);
+  beep(880,.1,.3);
+}
+function stopEmitting(){
+  if(!emitting)return;emitting=false;emitPath=[];
+  if(emitPolyline)emitPolyline.setLatLngs([]);
+  clearInterval(activeTimeInterval);
+  document.getElementById('startAlertBtn').style.display='';document.getElementById('stopAlertBtn').style.display='none';
+  document.getElementById('emitBadge').textContent='INACTIVO';document.getElementById('emitBadge').className='topbar-badge';
+  document.getElementById('emitDot').className='emit-dot';document.getElementById('emitStatusLabel').textContent='Seleccioná tipo y activá la alerta';
+  document.getElementById('startAlertBtn').className='big-btn btn-start-alert';
+  document.getElementById('emitDistBadge').classList.add('hidden');
+  document.getElementById('speedVal').textContent='—';document.getElementById('receptorCount').textContent='0';document.getElementById('activeTime').textContent='00:00';
+}
+
+/* ── DEMO EMERGENCY ── */
+let routeLine=null;
+function triggerDemo(){
+  if(!myPos)return;demoActive=true;
+  const vks=Object.keys(vtypes),vt=vks[Math.floor(Math.random()*vks.length)],cfg=vtypes[vt];
+  const dist=300+Math.random()*500,angle=Math.random()*Math.PI*2;
+  const dLat=(dist*Math.cos(angle))/111320,dLng=(dist*Math.sin(angle))/(111320*Math.cos(myPos.lat*Math.PI/180));
+  const ep={lat:myPos.lat+dLat,lng:myPos.lng+dLng};
+  if(emergencyMarker)emergencyMarker.remove();
+  emergencyMarker=L.marker([ep.lat,ep.lng],{icon:L.divIcon({html:`<div style="width:44px;height:44px;background:${cfg.color};border-radius:50%;border:3px solid #fff;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 0 24px ${cfg.color}99">${cfg.icon}</div>`,iconSize:[44,44],iconAnchor:[22,22],className:''})}).addTo(receiverMap);
+  if(routeLine)routeLine.remove();
+  routeLine=L.polyline([[myPos.lat,myPos.lng],[ep.lat,ep.lng]],{color:cfg.color,weight:3,opacity:.6,dashArray:'6,4'}).addTo(receiverMap);
+  receiverMap.fitBounds([[myPos.lat,myPos.lng],[ep.lat,ep.lng]],{padding:[40,40]});
+  const dm=Math.round(haversine(myPos.lat,myPos.lng,ep.lat,ep.lng));
+  const dirs=['Norte','Sur','Este','Oeste','Noreste','Noroeste','Sureste','Suroeste'];
+  document.getElementById('alertCard').classList.add('visible');document.getElementById('recvIdle').style.display='none';
+  document.getElementById('alertCardIcon').textContent=cfg.icon;document.getElementById('alertCardSub').textContent=`${cfg.label} detectado cerca`;
+  document.getElementById('alertType').textContent=`${cfg.icon} ${cfg.label}`;
+  document.getElementById('alertDist').textContent=dm>1000?(dm/1000).toFixed(1)+' km':dm+' m';
+  document.getElementById('alertSpeed').textContent=(60+Math.floor(Math.random()*40))+' km/h';
+  document.getElementById('alertDir').textContent=dirs[Math.floor(Math.random()*dirs.length)];
+  document.getElementById('recvDistBadge').classList.remove('hidden');document.getElementById('recvDistVal').textContent=dm>1000?(dm/1000).toFixed(1)+' km':dm+' m';
+  document.getElementById('recvBadge').textContent='⚠ ALERTA';document.getElementById('recvBadge').className='topbar-badge alerting';
+  document.getElementById('alertOverlay').className='on';document.getElementById('alertBanner').classList.add('show');
+  document.getElementById('instrText').textContent='Movete a la derecha y detenete si es posible. El vehículo se aproxima por tu ruta.';
+  alertSound();
+  // Push notification if installed
+  if('serviceWorker' in navigator && Notification.permission==='granted'){
+    navigator.serviceWorker.ready.then(reg=>reg.showNotification('🚨 AlertaVial PRO',{body:`${cfg.label} a ${dm>1000?(dm/1000).toFixed(1)+' km':dm+' m'} de tu posición`,icon:'icon-192.png',vibrate:[200,100,200,100,200],requireInteraction:false}));
+  }
+  setTimeout(clearRecvAlert,10000);
+}
+function clearRecvAlert(){
+  demoActive=false;if(emergencyMarker){emergencyMarker.remove();emergencyMarker=null;}if(routeLine){routeLine.remove();routeLine=null;}
+  document.getElementById('alertCard').classList.remove('visible');document.getElementById('recvIdle').style.display='';
+  document.getElementById('recvBadge').textContent='ESCUCHANDO';document.getElementById('recvBadge').className='topbar-badge live';
+  document.getElementById('alertOverlay').className='';document.getElementById('alertBanner').classList.remove('show');
+  document.getElementById('recvDistBadge').classList.add('hidden');
+  if(myPos)receiverMap.panTo([myPos.lat,myPos.lng],{animate:true,duration:1});
+}
+function clearDemo(){if(demoInterval)clearInterval(demoInterval);demoInterval=null;clearRecvAlert();}
+
+/* ── UTILS ── */
+function haversine(a,b,c,d){const R=6371000,dA=(c-a)*Math.PI/180,dB=(d-b)*Math.PI/180,x=Math.sin(dA/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dB/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
+function beep(f,v,d){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='sine';o.frequency.value=f;g.gain.setValueAtTime(v,c.currentTime);g.gain.linearRampToValueAtTime(0,c.currentTime+d);o.start(c.currentTime);o.stop(c.currentTime+d);}catch(e){}}
+function alertSound(){try{const c=new(window.AudioContext||window.webkitAudioContext)();[0,.35,.7].forEach(t=>{const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='sawtooth';g.gain.setValueAtTime(.25,c.currentTime+t);o.frequency.setValueAtTime(900,c.currentTime+t);o.frequency.linearRampToValueAtTime(450,c.currentTime+t+.3);g.gain.linearRampToValueAtTime(0,c.currentTime+t+.3);o.start(c.currentTime+t);o.stop(c.currentTime+t+.35);});}catch(e){}}
+
+// Request notification permission when entering receiver mode
+const _origEnter=enterMode;
+window.enterMode=function(mode){
+  if(mode==='receiver'&&'Notification' in window&&Notification.permission==='default')Notification.requestPermission();
+  _origEnter(mode);
+};
+
+navigator.geolocation&&navigator.geolocation.getCurrentPosition(p=>{myPos={lat:p.coords.latitude,lng:p.coords.longitude}},()=>{myPos={lat:-34.6037,lng:-58.3816}});
+</script>
+</body>
+</html>
